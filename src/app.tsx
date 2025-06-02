@@ -1,14 +1,32 @@
 import { useMemo, useRef, useState } from "react"
 import animeData from "../anime-data"
+import animeDataEnglish from "../anime-data-english"
 import { domToBlob } from "modern-screenshot"
 import { toast } from "sonner"
 import { usePersistState } from "./hooks"
 
 export const App = () => {
-  const [selectedAnime, setSelectedAnime] = usePersistState<string[]>(
-    "selectedAnime",
+  const [selectedAnimeIndices, setSelectedAnimeIndices] = usePersistState<string[]>(
+    "selectedAnimeIndices",
     []
   )
+  const [language, setLanguage] = usePersistState<"zh" | "en">(
+    "language",
+    "en"
+  )
+
+  const currentAnimeData = language === "en" ? animeDataEnglish : animeData
+
+  // Convert indices to titles for the current language
+  const selectedAnime = useMemo(() => {
+    return selectedAnimeIndices.map(index => {
+      const [year, position] = index.split('-')
+      const yearData = currentAnimeData[year]
+      if (!yearData) return null
+      const anime = yearData[parseInt(position)]
+      return anime?.title || null
+    }).filter(Boolean) as string[]
+  }, [selectedAnimeIndices, currentAnimeData])
 
   const wrapper = useRef<HTMLDivElement>(null)
 
@@ -106,9 +124,9 @@ export const App = () => {
     return `
 ${preset}
 用户动画观看记录：(下面的年份是动画发布的年份)
-${Object.keys(animeData)
+${Object.keys(currentAnimeData)
   .map((year) => {
-    const items = animeData[year] || []
+    const items = currentAnimeData[year] || []
 
     if (items.length === 0) return ""
 
@@ -133,7 +151,7 @@ ${Object.keys(animeData)
   .filter(Boolean)
   .join("\n")}
     `.trim()
-  }, [selectedAnime, promptType])
+  }, [selectedAnime, promptType, language, currentAnimeData])
 
   return (
     <>
@@ -145,46 +163,56 @@ ${Object.keys(animeData)
           >
             <div className="border-b justify-between p-2 text-lg  font-bold flex">
               <h1>
-                动画世代<span className="remove"> - 点击选择你看过的动画</span>
+                {language === "en" ? "Anime Generations" : "动画世代"}
+                <span className="remove"> - {language === "en" ? "Click to select anime you've watched" : "点击选择你看过的动画"}</span>
                 <span className="ml-2 text-zinc-400 font-medium">
                   anime-sedai.egoist.dev
                 </span>
               </h1>
-              <span className="shrink-0 whitespace-nowrap">
-                我看过 {selectedAnime.length}/
-                {
-                  Object.values(animeData).flatMap((year) => {
-                    return year.map((item) => item.title).slice(0, 12)
-                  }).length
-                }{" "}
-                部动画
-              </span>
+              <div className="flex items-center gap-4">
+                <button
+                  className="remove text-sm font-normal border rounded px-2 py-1 hover:bg-zinc-50"
+                  onClick={() => setLanguage(language === "en" ? "zh" : "en")}
+                >
+                  {language === "en" ? "中文" : "English"}
+                </button>
+                <span className="shrink-0 whitespace-nowrap">
+                  {language === "en" ? "I've watched" : "我看过"} {selectedAnime.length}/
+                  {
+                    Object.values(currentAnimeData).flatMap((year) => {
+                      return year.map((item) => item.title).slice(0, 12)
+                    }).length
+                  }{" "}
+                  {language === "en" ? "anime" : "部动画"}
+                </span>
+              </div>
             </div>
-            {Object.keys(animeData).map((year) => {
-              const items = animeData[year] || []
+            {Object.keys(currentAnimeData).map((year) => {
+              const items = currentAnimeData[year] || []
               return (
                 <div key={year} className="flex border-b">
                   <div className="bg-red-500 shrink-0 text-white flex items-center font-bold justify-center p-1 size-16 md:size-20 border-black">
                     {year}
                   </div>
                   <div className="flex shrink-0">
-                    {items.slice(0, 12).map((item) => {
-                      const isSelected = selectedAnime.includes(item.title)
+                    {items.slice(0, 12).map((item, itemIndex) => {
+                      const animeIndex = `${year}-${itemIndex}`
+                      const isSelected = selectedAnimeIndices.includes(animeIndex)
                       return (
                         <button
-                          key={item.title}
+                          key={animeIndex}
                           className={`size-16 md:size-20 border-l break-all text-center shrink-0 inline-flex items-center p-1 overflow-hidden justify-center cursor-pointer text-sm  ${
                             isSelected ? "bg-green-500" : "hover:bg-zinc-100"
                           }`}
                           title={item.title}
                           onClick={() => {
-                            setSelectedAnime((prev) => {
+                            setSelectedAnimeIndices((prev) => {
                               if (isSelected) {
                                 return prev.filter(
-                                  (title) => title !== item.title
+                                  (index) => index !== animeIndex
                                 )
                               }
-                              return [...prev, item.title]
+                              return [...prev, animeIndex]
                             })
                           }}
                         >
@@ -206,14 +234,14 @@ ${Object.keys(animeData)
             type="button"
             className="border rounded-md px-4 py-2 inline-flex"
             onClick={() => {
-              setSelectedAnime(
-                Object.values(animeData).flatMap((year) => {
-                  return year.map((item) => item.title).slice(0, 12)
+              setSelectedAnimeIndices(
+                Object.entries(currentAnimeData).flatMap(([year, items]) => {
+                  return items.slice(0, 12).map((_, index) => `${year}-${index}`)
                 })
               )
             }}
           >
-            全选
+            {language === "en" ? "Select All" : "全选"}
           </button>
 
           {selectedAnime.length > 0 && (
@@ -221,10 +249,10 @@ ${Object.keys(animeData)
               type="button"
               className="border rounded-md px-4 py-2 inline-flex"
               onClick={() => {
-                setSelectedAnime([])
+                setSelectedAnimeIndices([])
               }}
             >
-              清除
+              {language === "en" ? "Clear" : "清除"}
             </button>
           )}
 
@@ -233,17 +261,21 @@ ${Object.keys(animeData)
             className="border rounded-md px-4 py-2 inline-flex"
             onClick={() => {
               toast.promise(copyImage(), {
-                success: "复制成功",
-                loading: "复制中",
+                success: language === "en" ? "Copied successfully" : "复制成功",
+                loading: language === "en" ? "Copying..." : "复制中",
                 error(error) {
-                  return `复制失败: ${
-                    error instanceof Error ? error.message : "未知错误"
-                  }`
+                  return language === "en"
+                    ? `Copy failed: ${
+                        error instanceof Error ? error.message : "Unknown error"
+                      }`
+                    : `复制失败: ${
+                        error instanceof Error ? error.message : "未知错误"
+                      }`
                 },
               })
             }}
           >
-            复制图片
+            {language === "en" ? "Copy Image" : "复制图片"}
           </button>
 
           <button
@@ -251,17 +283,21 @@ ${Object.keys(animeData)
             className="border rounded-md px-4 py-2 inline-flex"
             onClick={() => {
               toast.promise(downloadImage(), {
-                success: "下载成功",
-                loading: "下载中",
+                success: language === "en" ? "Downloaded successfully" : "下载成功",
+                loading: language === "en" ? "Downloading..." : "下载中",
                 error(error) {
-                  return `下载失败: ${
-                    error instanceof Error ? error.message : "未知错误"
-                  }`
+                  return language === "en"
+                    ? `Download failed: ${
+                        error instanceof Error ? error.message : "Unknown error"
+                      }`
+                    : `下载失败: ${
+                        error instanceof Error ? error.message : "未知错误"
+                      }`
                 },
               })
             }}
           >
-            下载图片
+            {language === "en" ? "Download Image" : "下载图片"}
           </button>
         </div>
 
@@ -269,7 +305,7 @@ ${Object.keys(animeData)
           <div className="border focus-within:ring-2 ring-pink-500 focus-within:border-pink-500 rounded-md">
             <div className="flex items-center justify-between p-2 border-b">
               <div className="flex items-center gap-2">
-                <span>锐评提示词</span>
+                <span>{language === "en" ? "AI Prompt" : "锐评提示词"}</span>
                 <select
                   className="border rounded-md"
                   value={promptType}
@@ -277,8 +313,8 @@ ${Object.keys(animeData)
                     setPromptType(e.currentTarget.value as any)
                   }}
                 >
-                  <option value="normal">普通</option>
-                  <option value="zako">杂鱼❤</option>
+                  <option value="normal">{language === "en" ? "Normal" : "普通"}</option>
+                  <option value="zako">{language === "en" ? "Zako❤" : "杂鱼❤"}</option>
                 </select>
               </div>
 
@@ -288,10 +324,10 @@ ${Object.keys(animeData)
                   className="text-sm text-zinc-500 hover:bg-zinc-100 px-1.5 h-7 flex items-center rounded-md"
                   onClick={() => {
                     navigator.clipboard.writeText(prompt)
-                    toast.success("复制成功")
+                    toast.success(language === "en" ? "Copied successfully" : "复制成功")
                   }}
                 >
-                  复制
+                  {language === "en" ? "Copy" : "复制"}
                 </button>
 
                 <button
@@ -303,7 +339,7 @@ ${Object.keys(animeData)
                     )}`
                   }}
                 >
-                  在 ChatWise 中打开 (需要先安装)
+                  {language === "en" ? "Open in ChatWise (requires installation)" : "在 ChatWise 中打开 (需要先安装)"}
                 </button>
               </div>
             </div>
@@ -317,26 +353,26 @@ ${Object.keys(animeData)
         </div>
 
         <div className="mt-2 text-center">
-          历年关注最多的动画，数据来自 bgm.tv，由
+          {language === "en" ? "Most popular anime by year, data from bgm.tv, created by" : "历年关注最多的动画，数据来自 bgm.tv，由"}
           <a
             href="https://x.com/localhost_4173"
             target="_blank"
             className="underline"
           >
-            低空飞行
+            {language === "en" ? "Low Altitude Flight" : "低空飞行"}
           </a>
-          制作，
+          {language === "en" ? ", " : "制作，"}
           <a
             href="https://github.com/egoist/anime-sedai"
             target="_blank"
             className="underline"
           >
-            查看代码
+            {language === "en" ? "View source" : "查看代码"}
           </a>
         </div>
 
         <div className="text-center">
-          作者的其它产品:{" "}
+          {language === "en" ? "Other products by the author: " : "作者的其它产品: "}
           <a
             href="https://chatwise.app"
             target="_blank"
@@ -345,7 +381,7 @@ ${Object.keys(animeData)
             <img src="https://chatwise.app/favicon.png" className="size-4" />{" "}
             ChatWise
           </a>
-          , 一个优雅的 AI 聊天客户端
+          {language === "en" ? ", an elegant AI chat client" : ", 一个优雅的 AI 聊天客户端"}
         </div>
       </div>
     </>
