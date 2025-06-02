@@ -123,7 +123,7 @@ export const App = () => {
                       return (
                         <button
                           key={animeIndex}
-                          className={`size-16 md:size-20 border-l break-all text-center shrink-0 inline-flex items-center p-1 overflow-hidden justify-center cursor-pointer text-sm  ${
+                          className={`size-16 md:size-20 border-l ${language === "en" ? "break-words" : "break-all"} text-center shrink-0 inline-flex items-center p-1 overflow-hidden justify-center cursor-pointer text-sm  ${
                             isSelected ? "bg-green-500" : "hover:bg-zinc-100"
                           }`}
                           title={item.title}
@@ -138,7 +138,7 @@ export const App = () => {
                             })
                           }}
                         >
-                          <span className="leading-tight w-full line-clamp-3">
+                          <span className={`w-full line-clamp-3 ${language === "en" ? "text-xs leading-tight" : "leading-tight"}`}>
                             {item.title}
                           </span>
                         </button>
